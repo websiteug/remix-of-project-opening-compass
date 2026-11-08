@@ -1,0 +1,364 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ============================================
+    // HELPER FUNCTIONS
+    // ============================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.email == 'lightstarrecord@gmail.com';
+    }
+    
+    function isArtist() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/artists/$(request.auth.uid));
+    }
+    
+    function isResourceOwner() {
+      return isAuthenticated() && resource.data.userId != null && request.auth.uid == resource.data.userId;
+    }
+    
+    function isArtistOwner() {
+      return isAuthenticated() && resource.data.artistId != null && request.auth.uid == resource.data.artistId;
+    }
+    
+    function incomingDataOwner() {
+      return isAuthenticated() && request.resource.data.userId != null && request.auth.uid == request.resource.data.userId;
+    }
+
+    // ============================================
+    // CONTENT COLLECTIONS (Public Read)
+    // ============================================
+    
+    // Tracks - public read, owner artist or admin can write
+    match /tracks/{trackId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isArtistOwner() || isAdmin();
+      allow delete: if isArtistOwner() || isAdmin();
+    }
+    
+    // Videos - public read, owner artist or admin can write
+    match /videos/{videoId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isArtistOwner() || isAdmin();
+      allow delete: if isArtistOwner() || isAdmin();
+    }
+    
+    // Artists - public read, owner or admin can write
+    match /artists/{artistId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isOwner(artistId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    // Hero Slides - public read/write (for payment redirects)
+    match /heroSlides/{slideId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Hero Slide Purchases
+    match /heroSlidePurchases/{purchaseId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    
+    // Reels - public read, owner artist or admin can manage
+    match /reels/{reelId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isArtistOwner() || isAdmin();
+      allow delete: if isArtistOwner() || isAdmin();
+    }
+    
+    // Posts - public read, owner or admin can manage
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isResourceOwner() || isAdmin();
+    }
+    
+    // Genres - public read, admin only write
+    match /genres/{genreId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Seleb Talks - public read, owner artist or admin can manage
+    match /selebTalks/{talkId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update: if isArtistOwner() || isAdmin();
+      allow delete: if isArtistOwner() || isAdmin();
+    }
+    
+    // Comments
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isResourceOwner() || isAdmin();
+    }
+    
+    // Likes
+    match /likes/{likeId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow delete: if isResourceOwner() || isAdmin();
+    }
+
+    // ============================================
+    // USER COLLECTIONS
+    // ============================================
+    
+    match /users/{userId} {
+      allow read: if true;
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /favourites/{userId} {
+      allow read, write: if isOwner(userId);
+      match /items/{itemId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    match /userFavourites/{docId} {
+      allow read: if isResourceOwner();
+      allow create: if incomingDataOwner();
+      allow update, delete: if isResourceOwner();
+    }
+    
+    match /playlists/{playlistId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isResourceOwner() || isAdmin();
+    }
+    
+    match /follows/{followId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow delete: if isResourceOwner() || isAdmin();
+    }
+    
+    match /listeningHistory/{userId} {
+      allow read, write: if isOwner(userId);
+      match /tracks/{historyId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+    
+    match /watchHistory/{userId} {
+      allow read, write: if isOwner(userId);
+      match /videos/{historyId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // ============================================
+    // SUBSCRIPTIONS & PAYMENTS
+    // ============================================
+    
+    match /subscriptions/{artistId} {
+      allow read: if isOwner(artistId) || isAdmin();
+      allow create: if isOwner(artistId) || isAdmin();
+      allow update: if isOwner(artistId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /transactions/{transactionId} {
+      allow read: if isResourceOwner() || isArtistOwner() || isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /payments/{paymentId} {
+      allow read: if isResourceOwner() || isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+    
+    match /heroSlidePayments/{paymentId} {
+      allow read: if isResourceOwner() || isArtistOwner() || isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ============================================
+    // NOTIFICATIONS
+    // ============================================
+    
+    match /notifications/{notificationId} {
+      allow read: if isResourceOwner() || isAdmin();
+      allow create: if isAuthenticated();
+      allow update: if isResourceOwner() || isAdmin();
+      allow delete: if isResourceOwner() || isAdmin();
+    }
+
+    // ============================================
+    // CHAT & MESSAGING
+    // ============================================
+    
+    match /chats/{chatId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid in resource.data.participants || isAdmin());
+      allow create: if isAuthenticated() && 
+        request.auth.uid in request.resource.data.participants;
+      allow update: if isAuthenticated() && 
+        (request.auth.uid in resource.data.participants || isAdmin());
+      allow delete: if isAdmin();
+      
+      match /messages/{messageId} {
+        allow read: if isAuthenticated() && 
+          (request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants || isAdmin());
+        allow create: if isAuthenticated() && 
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants &&
+          request.resource.data.senderId == request.auth.uid;
+        allow update: if isAuthenticated() && 
+          resource.data.senderId == request.auth.uid;
+        allow delete: if isAuthenticated() && 
+          (resource.data.senderId == request.auth.uid || isAdmin());
+      }
+    }
+    
+    match /messages/{messageId} {
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.senderId || 
+         request.auth.uid == resource.data.receiverId || 
+         isAdmin());
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      allow update: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || 
+         resource.data.receiverId == request.auth.uid);
+      allow delete: if isAuthenticated() && 
+        (resource.data.senderId == request.auth.uid || isAdmin());
+    }
+    
+    match /userChats/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+      match /conversations/{conversationId} {
+        allow read, write: if isOwner(userId) || isAdmin();
+      }
+    }
+
+    // ============================================
+    // ANALYTICS & STATS
+    // ============================================
+    
+    match /playCounts/{contentId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    match /viewCounts/{contentId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+    
+    match /artistAnalytics/{artistId} {
+      allow read: if isOwner(artistId) || isAdmin();
+      allow write: if isAdmin();
+      match /daily/{dateId} {
+        allow read: if isOwner(artistId) || isAdmin();
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // ============================================
+    // REPORTS & MODERATION
+    // ============================================
+    
+    match /reports/{reportId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    
+    match /blockedUsers/{blockId} {
+      allow read: if isResourceOwner() || isAdmin();
+      allow create: if isAuthenticated() && incomingDataOwner();
+      allow delete: if isResourceOwner() || isAdmin();
+    }
+
+    // ============================================
+    // ADMIN ONLY
+    // ============================================
+    
+    match /adminSettings/{settingId} {
+      allow read, write: if isAdmin();
+    }
+    
+    match /siteConfig/{configId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
+    // Non-sensitive visitor clicks. Visitors can append only; only admins can read/clear.
+    match /userActivities/{activityId} {
+      allow read, delete: if isAdmin();
+      allow update: if false;
+      allow create: if request.resource.data.keys().hasAll([
+          'action', 'target', 'page', 'destination', 'sessionId', 'signedIn', 'device', 'createdAt'
+        ]) && request.resource.data.keys().hasOnly([
+          'action', 'target', 'page', 'destination', 'sessionId', 'signedIn', 'device', 'createdAt'
+        ])
+        && request.resource.data.action in [
+          'Play', 'Pause', 'Next', 'Previous', 'Download', 'Share', 'Like', 'Unlike',
+          'Follow', 'Unfollow', 'Sign In', 'Sign Out', 'Sign Up', 'Register', 'Login',
+          'Upload', 'Search', 'See All', 'Recently Uploaded', 'Recently Added',
+          'Playlist', 'Music', 'Videos', 'Genres', 'Artists', 'Home', 'Dashboard',
+          'Save', 'Cancel', 'Close', 'Delete', 'Edit', 'Install App', 'Add to Playlist',
+          'Click button', 'Click a', 'Click input', 'Click select', 'Click textarea',
+          'Click summary', 'Click tab', 'Click checkbox', 'Click switch', 'Click slider',
+          'Click page', 'Click password field', 'Click form field'
+        ]
+        && request.resource.data.target in ['button', 'a', 'input', 'select', 'textarea', 'summary', 'tab', 'checkbox', 'switch', 'slider', 'page']
+        && request.resource.data.page in [
+          '/', '/music', '/videos', '/artists', '/genres', '/browse', '/recently-added',
+          '/playlist', '/favourites', '/profile', '/dashboard', '/guide', '/reels',
+          '/admin', '/admin/users', '/admin/artists', '/admin/music', '/admin/videos',
+          '/admin/hero-slides', '/admin/subscriptions', '/admin/genres', '/admin/guide',
+          '/admin/activities', '/artist/:id', '/video/:id', '/play/:id', '/other'
+        ]
+        && (request.resource.data.destination in ['', 'external']
+          || request.resource.data.destination.matches('^/[a-zA-Z/:-]*$') && request.resource.data.destination.size() <= 50)
+        && request.resource.data.sessionId is string
+        && request.resource.data.sessionId.matches('^[a-f0-9-]{36}$')
+        && request.resource.data.signedIn == isAuthenticated()
+        && request.resource.data.device in ['mobile', 'desktop']
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // ============================================
+    // SEARCH & INDEXING
+    // ============================================
+    
+    match /searchIndex/{indexId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
